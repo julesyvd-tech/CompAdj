@@ -21,11 +21,14 @@
     font-family:Verdana,Arial,sans-serif;color:#dfeee0;
     overflow:hidden;-webkit-font-smoothing:antialiased;
   }
+  /* Dither overlay behind stars now */
   body::before{
     content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
-    background-image:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Crect width='100%25' height='100%25' fill='%23020202'/%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.08'/%3E%3C/svg%3E");
-    background-repeat:repeat;mix-blend-mode:overlay;opacity:.95;
+    background-image:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Crect width='100%25' height='100%25' fill='%23020202'/%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.07'/%3E%3C/svg%3E");
+    background-repeat:repeat;mix-blend-mode:overlay;opacity:.9;
   }
+  canvas#stars{position:fixed;inset:0;z-index:1;display:block;width:100%;height:100%}
+  .worm-layer{position:fixed;inset:0;z-index:2;pointer-events:none}
   .wrap{position:relative;z-index:4;min-height:100vh;
     display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding-top:2vh;}
   .title-vertical{display:flex;flex-direction:column;align-items:center;gap:2px;z-index:6;user-select:none;}
@@ -41,8 +44,6 @@
     75%{transform:translateY(6%)}
     100%{transform:translateY(0)}
   }
-  canvas#stars{position:fixed;inset:0;z-index:1;display:block;width:100%;height:100%}
-  .worm-layer{position:fixed;inset:0;z-index:2;pointer-events:none}
   .links-left,.links-right{position:fixed;bottom:22px;z-index:7;display:flex;gap:14px;align-items:center}
   .links-left{left:18px}.links-right{right:18px}
   .link-btn{width:72px;height:72px;display:grid;place-items:center;
@@ -131,7 +132,7 @@
     titleEl.appendChild(span);
   });
 
-  // ==== STARFIELD SETUP ====
+  // ==== STARFIELD (CRT GLOW) ====
   const canvas = document.getElementById("stars");
   const ctx = canvas.getContext("2d");
   let w, h, stars = [];
@@ -144,11 +145,11 @@
   function random(min,max){return Math.random()*(max-min)+min;}
   function createStars(){
     stars = [];
-    for(let i=0;i<250;i++){
+    for(let i=0;i<260;i++){
       stars.push({
         x:random(0,w),
         y:random(0,h),
-        r:Math.random()*1.2,
+        r:Math.random()*1.1+0.3,
         c:wormColors[Math.floor(Math.random()*wormColors.length)],
         a:Math.random()
       });
@@ -156,61 +157,73 @@
   }
   createStars();
 
+  function drawStars(){
+    ctx.clearRect(0,0,w,h);
+    stars.forEach(s=>{
+      ctx.beginPath();
+      let glow = 0.6 + Math.sin(Date.now()/800 + s.a)*0.4;
+      ctx.globalAlpha = glow;
+      ctx.shadowBlur = 6;
+      ctx.shadowColor = s.c;
+      ctx.fillStyle = s.c;
+      ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+      ctx.fill();
+    });
+    requestAnimationFrame(drawStars);
+  }
+  drawStars();
+
   // ==== WORMS ====
   const wormLayer = document.getElementById("wormLayer");
 
-  // worm placement fix + dynamic constellation
-  let wormCount = 105; // bumped ~15%
+  // worm placement fix + smaller worms + dynamic constellation
+  let wormCount = 120;
   function createWorms(){
     wormLayer.innerHTML = "";
     const used = [];
-    const margin = 30;
     for(let i=0;i<wormCount;i++){
       const worm = document.createElementNS("http://www.w3.org/2000/svg","svg");
       worm.setAttribute("viewBox","0 0 200 40");
-      worm.classList.add("worm");
       const color = wormColors[i % wormColors.length];
-      worm.innerHTML = `<path d="M5,20 Q25,10 45,20 T85,20 T125,20 T165,20 T195,20" fill="none" stroke="${color}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>`;
+      worm.innerHTML = `<path d="M5,20 Q25,10 45,20 T85,20 T125,20 T165,20 T195,20" fill="none" stroke="${color}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`;
       worm.style.position="absolute";
-      worm.style.width="40px";
-      worm.style.height="20px";
+      worm.style.width="22px";
+      worm.style.height="10px";
 
-      // dynamic constellation random position
+      // random placement (no clustering)
       let x,y,tries=0;
       do{
-        x = Math.random()*(window.innerWidth - 80);
-        y = Math.random()*(window.innerHeight - 40);
+        x = Math.random()*(window.innerWidth - 60);
+        y = Math.random()*(window.innerHeight - 30);
         tries++;
-      }while(used.some(u=>Math.abs(u.x-x)<60 && Math.abs(u.y-y)<30) && tries<100);
+      }while(used.some(u=>Math.abs(u.x-x)<50 && Math.abs(u.y-y)<20) && tries<100);
       used.push({x,y});
       worm.style.left = x+"px";
       worm.style.top = y+"px";
-      worm.style.opacity = 0.9+Math.random()*0.1;
-      worm.style.filter = "drop-shadow(0 0 6px "+color+")";
+      worm.style.opacity = 0.85+Math.random()*0.15;
+      worm.style.filter = `drop-shadow(0 0 4px ${color})`;
       worm.style.transition = "transform 3s ease-in-out";
       wormLayer.appendChild(worm);
     }
   }
 
-  // reseed after load + slight delay
-  window.addEventListener("load",()=>{
-    setTimeout(createWorms,400);
-  });
+  // reseed after load
+  window.addEventListener("load",()=>{ setTimeout(createWorms,400); });
 
-  // soft wriggle animation
+  // subtle wriggle motion
   setInterval(()=>{
-    const worms = document.querySelectorAll(".worm");
-    worms.forEach((w,i)=>{
-      const dx = (Math.random()-0.5)*4;
-      const dy = (Math.random()-0.5)*4;
+    const worms = document.querySelectorAll(".worm-layer svg");
+    worms.forEach(w=>{
+      const dx = (Math.random()-0.5)*3;
+      const dy = (Math.random()-0.5)*3;
       w.style.transform = `translate(${dx}px,${dy}px)`;
     });
-  },2200);
+  },2400);
 
   // ==== SHOOTING STARS + EXPLOSIONS ====
   let shootCount=0;
   function shootingStar(){
-    if(document.hidden) return; // pause when not visible
+    if(document.hidden) return;
     shootCount++;
     const sx = Math.random()<0.5 ? 0 : w;
     const sy = random(0,h);
@@ -219,14 +232,11 @@
     let x=sx, y=sy;
     const trail = [];
     const c = wormColors[Math.floor(Math.random()*wormColors.length)];
-    let frame=0;
     const timer=setInterval(()=>{
-      frame++;
       x += Math.cos(angle)*spd*(sx===0?1:-1);
       y += Math.sin(angle)*spd;
       trail.push({x,y,life:1});
       trail.forEach(t=>t.life-=0.05);
-      trail.filter(t=>t.life>0);
       ctx.save();
       ctx.globalCompositeOperation="lighter";
       trail.forEach(t=>{
@@ -243,6 +253,7 @@
 
     if(shootCount%5===0){setTimeout(explosion,random(2000,3000));}
   }
+
   function explosion(){
     if(document.hidden) return;
     const ex=w/2+random(-w*0.15,w*0.15);
@@ -274,20 +285,6 @@
   }
 
   setInterval(shootingStar,90000);
-
-  // ==== DRAW STARS LOOP ====
-  function drawStars(){
-    ctx.clearRect(0,0,w,h);
-    stars.forEach(s=>{
-      ctx.beginPath();
-      ctx.globalAlpha = 0.4 + Math.sin(Date.now()/700 + s.a)*0.3;
-      ctx.fillStyle = s.c;
-      ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
-      ctx.fill();
-    });
-    requestAnimationFrame(drawStars);
-  }
-  drawStars();
 
   // ==== PLAYER DRAG ====
   const playerBox=document.getElementById("playerBox");
